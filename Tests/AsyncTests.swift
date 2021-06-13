@@ -29,25 +29,7 @@ import XCTest
 
 @available(macOS 12, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
 final class AsyncTests: BaseTestCase {
-    func testAsyncHandle() async {
-        // Given, When
-        let response = await AF.request(.get).decode(TestResponse.self).handle.get()
-
-        // Then
-        XCTAssertNotNil(response.value)
-    }
-    
-    func testAsyncCancellation() async {
-        // Given, When
-        let response = AF.request(.get).decode(TestResponse.self)
-        response.handle.cancel()
-        let value = await response.handle.get()
-
-        // Then
-        XCTAssertTrue(value.error?.isExplicitlyCancelledError == true)
-    }
-
-    func testAsyncResponse() async {
+    func testDataTaskResponse() async {
         // Given, When
         let response = await AF.request(.get).decode(TestResponse.self).response
 
@@ -55,12 +37,69 @@ final class AsyncTests: BaseTestCase {
         XCTAssertNotNil(response.value)
     }
 
-    func testAsyncResponseValue() async throws {
+    func testDataTaskCancellation() async {
+        // Given
+        let task = AF.request(.get).decode(TestResponse.self)
+
+        // When
+        task.cancel()
+        let response = await task.response
+
+        // Then
+        XCTAssertTrue(response.error?.isExplicitlyCancelledError == true)
+        XCTAssertTrue(task.isCancelled, "Underlying DataRequest should be cancelled.")
+    }
+
+    func testDataTaskResult() async {
+        // Given, When
+        let result = await AF.request(.get).decode(TestResponse.self).result
+
+        // Then
+        XCTAssertNotNil(result.success)
+    }
+
+    func testDataTaskValue() async throws {
         // Given, When
         let value = try await AF.request(.get).decode(TestResponse.self).value
 
         // Then
         XCTAssertEqual(value.url, "http://127.0.0.1:8080/get")
+    }
+
+    func testConcurrentRequests() async {
+        // Given
+        let session = Session(); defer { withExtendedLifetime(session) {} }
+
+        // When
+        async let first = session.request(.get).decode(TestResponse.self).response
+        async let second = session.request(.get).decode(TestResponse.self).response
+        async let third = session.request(.get).decode(TestResponse.self).response
+
+        // Then
+        let values = await [first.value, second.value, third.value].compactMap { $0 }
+        XCTAssertEqual(values.count, 3)
+    }
+
+    func testTaskString() async {
+        // Given
+        let session = Session(); defer { withExtendedLifetime(session) {} }
+
+        // When
+        let result = await session.request(.get).string().result
+
+        // Then
+        XCTAssertTrue(result.isSuccess)
+    }
+
+    func testTaskData() async {
+        // Given
+        let session = Session(); defer { withExtendedLifetime(session) {} }
+
+        // When
+        let result = await session.request(.get).data().result
+
+        // Then
+        XCTAssertTrue(result.isSuccess)
     }
 }
 
